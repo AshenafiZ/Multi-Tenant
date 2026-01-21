@@ -73,6 +73,7 @@ model Property {
 model Image {
   id          String    @id @default(uuid()) @db.Uuid
   url         String    @db.VarChar(255)
+  publicId    String    @unique 
   propertyId  String    @db.Uuid
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())

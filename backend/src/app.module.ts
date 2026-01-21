@@ -4,7 +4,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { PropertiesModule } from './properties/properties.module';
 import { PrismaModule } from './prisma/prisma.module';  
+import { ImagesModule } from './images/images.module';
 
 
 @Module({
@@ -13,6 +15,8 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,  // Exports PrismaService globally
     UsersModule,
     AuthModule,
+    PropertiesModule,
+    ImagesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
