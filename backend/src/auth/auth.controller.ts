@@ -20,7 +20,7 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @HttpCode(HttpStatus.OK)
   async login(@Request() req): Promise<any> {
-    return this.authService.login(req.user);  // ✅ Returns JWT tokens!
+    return this.authService.login(req.user);  
   }
 
   @Post('register')

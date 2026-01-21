@@ -1,19 +1,280 @@
-
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, Prisma } from '../generated/prisma/client';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { QueryUsersDto } from './dto/query-users.dto';
+import { Prisma, Role, User } from '../generated/prisma/client';
+import { PaginatedUsersResponse , UserResponse, PaginationMeta } from './entities/paginated-users.entity';
+
+
+export interface PaginatedUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  isActive: boolean;
+  createdAt: Date;
+  deletedAt?: Date | null;
+  propertiesCount: number;
+  favoritesCount: number;
+}
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: Prisma.UserCreateInput): Promise<User> {
-    return this.prisma.user.create({ data });
+  /** ADMIN: List ALL users with advanced filtering + pagination */
+  async findAll(
+    query: QueryUsersDto, 
+    isAdmin: boolean
+  ): Promise<PaginatedUsersResponse> {
+    const { 
+      page = 1, 
+      limit = 10, 
+      role, 
+      isActive, 
+      includeDeleted, 
+      search 
+    } = query;
+    
+    const skip = (page - 1) * limit;
+    const take = Math.min(limit, 100); // Max 100 records
+
+    // Build where clause - Admin sees soft deleted when requested
+    const where: Prisma.UserWhereInput = {
+      // Only active users unless admin + includeDeleted
+      ...(isAdmin && includeDeleted ? {} : { deletedAt: null }),
+      ...(role && { role }),
+      ...(typeof isActive === 'boolean' && { isActive }),
+      ...(search && {
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [prismaUsers, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          deletedAt: isAdmin ? true : false,
+          _count: {
+            select: { 
+              properties: true, 
+              favorites: true 
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    // ✅ TRANSFORM Prisma _count → UserResponse format
+    const users: UserResponse[] = prismaUsers.map((user) => ({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      deletedAt: user.deletedAt ?? null,
+      propertiesCount: Number(user._count.properties),
+      favoritesCount: Number(user._count.favorites),
+    }));
+
+    return {
+      data: users,
+      pagination: {
+        page,
+        limit: take,
+        total,
+        pages: Math.ceil(total / take),
+      } as PaginationMeta,
+    };
   }
 
-  async findAll(): Promise<User[]> {
-    return this.prisma.user.findMany({ where: { deletedAt: null } });
+  /** ADMIN: Get single user (sees soft deleted) */
+  async findOne(id: string, includeDeleted: boolean = false): Promise<UserResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        deletedAt: true,
+        _count: {
+          select: { 
+            properties: includeDeleted ? true : { where: { deletedAt: null } },
+            favorites: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${id}" not found`);
+    }
+
+    // Block soft deleted for non-admin
+    if (!includeDeleted && user.deletedAt) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      deletedAt: user.deletedAt ?? null,
+      propertiesCount: Number(user._count.properties),
+      favoritesCount: Number(user._count.favorites),
+    };
   }
 
-  // Add findById, update, softDelete similarly
+  /** ANY USER: Get own profile (no soft delete access) */
+  async findProfile(userId: string): Promise<UserResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        _count: {
+          select: { 
+            properties: { where: { deletedAt: null } }, // Only active properties
+            favorites: { where: { deletedAt: null } },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      deletedAt: null, // Never show deletedAt for self
+      propertiesCount: Number(user._count.properties),
+      favoritesCount: Number(user._count.favorites),
+    };
+  }
+
+  /** ADMIN: Update any user */
+  async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User with ID "${id}" not found`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: dto,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        deletedAt: true,
+        _count: {
+          select: { properties: true, favorites: true },
+        },
+      },
+    });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      firstName: updatedUser.firstName,
+      lastName: updatedUser.lastName,
+      role: updatedUser.role,
+      isActive: updatedUser.isActive,
+      createdAt: updatedUser.createdAt,
+      deletedAt: updatedUser.deletedAt ?? null,
+      propertiesCount: Number(updatedUser._count.properties),
+      favoritesCount: Number(updatedUser._count.favorites),
+    };
+  }
+
+  /** ADMIN: Soft delete user */
+  async softDelete(id: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User with ID "${id}" not found`);
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { 
+        deletedAt: new Date(),
+        isActive: false 
+      },
+    });
+
+    return { message: `User "${user.email}" soft deleted successfully` };
+  }
+
+  /** ADMIN: Restore soft deleted user */
+  async restore(id: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ 
+      where: { 
+        id,
+        deletedAt: { not: null } 
+      } 
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Soft deleted user with ID "${id}" not found`);
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { 
+        deletedAt: null,
+        isActive: true 
+      },
+    });
+
+    return { message: `User "${user.email}" restored successfully` };
+  }
+
+  /** ADMIN: Permanently delete user */
+  async forceDelete(id: string): Promise<{ message: string }> {
+    await this.prisma.user.delete({ where: { id } });
+    return { message: `User permanently deleted` };
+  }
 }
