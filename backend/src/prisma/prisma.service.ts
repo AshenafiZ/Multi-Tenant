@@ -53,6 +53,4 @@ export class PrismaService
     this.logger.log('Prisma database disconnected');
   }
 
-  // Optional: clean shutdown helper
-
 }

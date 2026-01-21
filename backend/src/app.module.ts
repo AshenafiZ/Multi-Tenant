@@ -8,6 +8,7 @@ import { PropertiesModule } from './properties/properties.module';
 import { PrismaModule } from './prisma/prisma.module';  
 import { ImagesModule } from './images/images.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { MessagesModule } from './messages/messages.module';
 
 
 @Module({
@@ -18,7 +19,8 @@ import { FavoritesModule } from './favorites/favorites.module';
     AuthModule,
     PropertiesModule,
     ImagesModule,
-    FavoritesModule
+    FavoritesModule,
+    MessagesModule
   ],
   controllers: [AppController],
   providers: [AppService],
