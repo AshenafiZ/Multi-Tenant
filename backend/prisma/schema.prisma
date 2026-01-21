@@ -1,0 +1,116 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  moduleFormat  = "cjs" 
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum Role {
+  admin
+  owner
+  user
+}
+
+enum PropertyStatus {
+  draft
+  published
+  archived
+}
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  email             String             @unique @db.VarChar(255)
+  password          String             @db.VarChar(255)
+  firstName         String             @db.VarChar(100)
+  lastName          String             @db.VarChar(100)
+  role              Role               @default(user)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  properties        Property[]
+  favorites         Favorite[]
+  sentMessages      Message[]          @relation("sender")
+  receivedMessages  Message[]          @relation("receiver")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Property {
+  id          String           @id @default(uuid()) @db.Uuid
+  title       String           @db.VarChar(255)
+  description String
+  location    String           @db.VarChar(255)
+  price       Decimal          @db.Decimal(12, 2)
+  status      PropertyStatus   @default(draft)
+  ownerId     String           @db.Uuid
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  images      Image[]
+  favorites   Favorite[]
+  messages    Message[]
+
+  @@index([title])
+  @@index([location])
+  @@index([price])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model Image {
+  id          String    @id @default(uuid()) @db.Uuid
+  url         String    @db.VarChar(255)
+  propertyId  String    @db.Uuid
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([propertyId])
+}
+
+model Favorite {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  propertyId  String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@unique([userId, propertyId])
+  @@index([userId])
+  @@index([propertyId])
+}
+
+model Message {
+  id          String    @id @default(uuid()) @db.Uuid
+  senderId    String    @db.Uuid
+  receiverId  String    @db.Uuid
+  propertyId  String    @db.Uuid
+  content     String
+  isRead      Boolean   @default(false)
+  sender      User      @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User      @relation("receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([propertyId])
+}
