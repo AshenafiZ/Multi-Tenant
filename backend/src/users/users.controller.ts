@@ -19,7 +19,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { PaginatedUsersResponse } from './entities/paginated-users.entity';
+import { PaginatedUsersResponse, UserResponse } from './entities/paginated-users.entity';
+import { ApiPaginatedResponse } from '../common/entities/paginated-response.entity';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -32,6 +33,7 @@ export class UsersController {
   @Get()
   @Roles('admin')
   @ApiOperation({ summary: 'Get all users with admin dashboard filters' })
+  @ApiPaginatedResponse(UserResponse)
   @ApiResponse({ type: PaginatedUsersResponse })
   findAll(@Query() query: QueryUsersDto, @CurrentUser() user: any) {
     return this.usersService.findAll(query, user.role === 'admin');
