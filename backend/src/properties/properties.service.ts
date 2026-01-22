@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { FilterPropertiesDto } from './dto/filter-properties.dto';
-import { Prisma, PropertyStatus } from '../generated/prisma/client';
+import { Prisma, PropertyStatus } from '@prisma/client';
 import { PaginatedResult } from '../common/interfaces/paginated.interface';
 import { PropertyResponse } from './entities/property-response.entity';
 import { ImagesService } from '../images/images.service';
@@ -15,42 +15,20 @@ export class PropertiesService {
         private imagesService: ImagesService,
     ) { }
 
-    async create(createPropertyDto: CreatePropertyDto, userId: string, files?: Express.Multer.File[]) {
+    async create(createPropertyDto: CreatePropertyDto, user: { userId: string; role: string }, files?: Express.Multer.File[]) {
         const property = await this.prisma.property.create({
             data: {
                 ...createPropertyDto,
-                ownerId: userId,
+                ownerId: user.userId,
+                status: 'draft' as PropertyStatus,
             },
         });
 
-        // ✅ FIXED: Explicit typing + Prisma select
-        const uploadedImages: { id: string; url: string; publicId: string }[] = [];
-
         if (files?.length) {
-            for (const file of files) {
-                const result: any = await this.imagesService['cloudinary'].uploadImage(file, 'properties');
-                const image = await this.prisma.image.create({
-                    data: {
-                        url: result.secure_url,
-                        publicId: result.public_id,
-                        propertyId: property.id,
-                    },
-                    select: {  // ✅ FIXED: Explicitly select publicId
-                        id: true,
-                        url: true,
-                        publicId: true,
-                    }
-                });
-                
-                uploadedImages.push({
-                    id: image.id,
-                    url: image.url,
-                    publicId: image.publicId,  // ✅ NO ERROR
-                });
-            }
+            await this.imagesService.uploadImagesForProperty(property.id, files);
         }
 
-        return this.findOne(property.id);
+        return this.findOnePublicOrPrivate(property.id, user);
     }
 
     private async createWithImages(dto: CreatePropertyDto, ownerId: string, files: Express.Multer.File[]) {
@@ -61,25 +39,7 @@ export class PropertiesService {
             },
         });
 
-        // ✅ FIXED: Explicit typing
-        const uploadedImages: any[] = [];
-        for (const file of files.slice(0, 10)) {
-            const result: any = await this.imagesService['cloudinary'].uploadImage(file, 'properties');
-            const image = await this.prisma.image.create({
-                data: {
-                    url: result.secure_url,
-                    propertyId: property.id,
-                    publicId: result.public_id,
-                },
-                select: {  // ✅ FIXED: Explicitly select publicId
-                    id: true,
-                    url: true,
-                    publicId: true,
-                }
-            });
-            uploadedImages.push(image);
-        }
-
+        await this.imagesService.uploadImagesForProperty(property.id, files.slice(0, 10));
         const propertyWithImages = await this.prisma.property.findUnique({
             where: { id: property.id },
             include: {
@@ -92,11 +52,10 @@ export class PropertiesService {
         return this.formatPropertyResponse(propertyWithImages);
     }
 
-    async findAll(filter: FilterPropertiesDto): Promise<PaginatedResult<PropertyResponse>> {
+    async findAllPublished(filter: FilterPropertiesDto): Promise<PaginatedResult<PropertyResponse>> {
         const {
             page = 1,
             limit = 12,
-            status,
             minPrice,
             maxPrice,
             location
@@ -107,15 +66,15 @@ export class PropertiesService {
 
         const where: Prisma.PropertyWhereInput = {
             deletedAt: null,
-            ...(status && { status }),
+            status: 'published',
             ...(location && {
                 location: {
                     contains: location,
                     mode: 'insensitive'
                 }
             }),
-            ...(minPrice && { price: { gte: minPrice } }),
-            ...(maxPrice && { price: { lte: maxPrice } }),
+            ...(typeof minPrice === 'number' && { price: { gte: minPrice } }),
+            ...(typeof maxPrice === 'number' && { price: { lte: maxPrice } }),
         };
 
         const [properties, total] = await Promise.all([
@@ -152,7 +111,7 @@ export class PropertiesService {
         };
     }
 
-    async findOne(id: string): Promise<PropertyResponse> {
+    async findOnePublicOrPrivate(id: string, user: { userId: string; role: string } | null): Promise<PropertyResponse> {
         const property = await this.prisma.property.findUnique({
             where: { id },
             include: {
@@ -171,16 +130,35 @@ export class PropertiesService {
             throw new NotFoundException('Property not found');
         }
 
+        // Public can only see published properties
+        if (property.status !== 'published') {
+            const isOwner = !!user && property.ownerId === user.userId;
+            const isAdmin = user?.role === 'admin';
+            if (!isOwner && !isAdmin) {
+                throw new NotFoundException('Property not found');
+            }
+        }
+
         return this.formatPropertyResponse(property);
     }
 
-    async update(id: string, dto: UpdatePropertyDto, userId: string) {
+    async updateDraft(id: string, dto: UpdatePropertyDto, user: { userId: string; role: string }) {
         const property = await this.prisma.property.findUnique({
             where: { id }
         });
 
-        if (!property || property.ownerId !== userId) {
+        if (!property || property.deletedAt) {
+            throw new NotFoundException('Property not found');
+        }
+
+        const isOwner = property.ownerId === user.userId;
+        const isAdmin = user.role === 'admin';
+        if (!isOwner && !isAdmin) {
             throw new ForbiddenException('Not authorized to update this property');
+        }
+
+        if (property.status !== 'draft') {
+            throw new ForbiddenException('Published properties cannot be edited');
         }
 
         const updatedProperty = await this.prisma.property.update({
@@ -201,10 +179,86 @@ export class PropertiesService {
         return this.formatPropertyResponse(updatedProperty);
     }
 
-    async softDelete(id: string, userId: string) {
+    async publish(id: string, user: { userId: string; role: string }) {
         const property = await this.prisma.property.findUnique({ where: { id } });
 
-        if (!property || property.ownerId !== userId) {
+        if (!property || property.deletedAt) {
+            throw new NotFoundException('Property not found');
+        }
+
+        const isOwner = property.ownerId === user.userId;
+        const isAdmin = user.role === 'admin';
+        if (!isOwner && !isAdmin) {
+            throw new ForbiddenException('Not authorized to publish this property');
+        }
+
+        if (property.status !== 'draft') {
+            throw new BadRequestException('Only draft properties can be published');
+        }
+
+        // Validation before publishing
+        if (!property.title?.trim() || !property.description?.trim() || !property.location?.trim()) {
+            throw new BadRequestException('Property must have title, description, and location before publishing');
+        }
+        if (Number(property.price) <= 0) {
+            throw new BadRequestException('Property price must be greater than 0 before publishing');
+        }
+
+        const imagesCount = await this.prisma.image.count({
+            where: { propertyId: id, deletedAt: null },
+        });
+        if (imagesCount < 1) {
+            throw new BadRequestException('At least one image is required before publishing');
+        }
+
+        await this.prisma.$transaction(async (tx) => {
+            // Re-check draft inside transaction to prevent races
+            const fresh = await tx.property.findUnique({ where: { id }, select: { status: true, deletedAt: true } });
+            if (!fresh || fresh.deletedAt) {
+                throw new NotFoundException('Property not found');
+            }
+            if (fresh.status !== 'draft') {
+                throw new BadRequestException('Only draft properties can be published');
+            }
+            await tx.property.update({
+                where: { id },
+                data: { status: 'published' as PropertyStatus },
+            });
+        });
+
+        return this.findOnePublicOrPrivate(id, user);
+    }
+
+    async disable(id: string, user: { userId: string; role: string }) {
+        if (user.role !== 'admin') {
+            throw new ForbiddenException('Admin only');
+        }
+
+        const property = await this.prisma.property.findUnique({ where: { id } });
+        if (!property || property.deletedAt) {
+            throw new NotFoundException('Property not found');
+        }
+
+        await this.prisma.property.update({
+            where: { id },
+            data: {
+                status: 'archived' as PropertyStatus
+            },
+        });
+
+        return { message: 'Property disabled (archived) successfully' };
+    }
+
+    async softDelete(id: string, user: { userId: string; role: string }) {
+        const property = await this.prisma.property.findUnique({ where: { id } });
+
+        if (!property || property.deletedAt) {
+            throw new NotFoundException('Property not found');
+        }
+
+        const isOwner = property.ownerId === user.userId;
+        const isAdmin = user.role === 'admin';
+        if (!isOwner && !isAdmin) {
             throw new ForbiddenException('Not authorized to delete this property');
         }
 

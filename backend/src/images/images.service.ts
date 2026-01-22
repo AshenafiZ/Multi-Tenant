@@ -1,26 +1,52 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { UploadImagesDto } from './dto/upload-images.dto';
 
 @Injectable()
 export class ImagesService {
+  private readonly logger = new Logger(ImagesService.name);
+
   constructor(
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
   ) {}
 
+  async uploadImagesForProperty(propertyId: string, files: Express.Multer.File[]) {
+    if (!files?.length) return [];
+    if (files.length > 10) {
+      throw new BadRequestException('Maximum 10 images allowed');
+    }
+
+    const uploadedImages: any[] = [];
+    for (const file of files) {
+      const result = await this.cloudinary.uploadImage(file, 'properties');
+      const image = await this.prisma.image.create({
+        data: {
+          url: result.secure_url,
+          propertyId,
+          publicId: result.public_id,
+        },
+      });
+      uploadedImages.push(image);
+    }
+    return uploadedImages;
+  }
+
   async uploadImages(files: Express.Multer.File[], dto: UploadImagesDto, userId: string) {
+    this.logger.log(`Upload request: ${files.length} files for property ${dto.propertyId}`);
+
+    // ✅ Ownership check FIRST
     const property = await this.prisma.property.findFirst({
-      where: { 
+      where: {
         id: dto.propertyId,
         ownerId: userId,
-        deletedAt: null 
+        deletedAt: null,
       },
     });
 
     if (!property) {
-      throw new ForbiddenException('Property not found or not authorized');
+      throw new ForbiddenException('Property not found or access denied');
     }
 
     if (files.length === 0) {
@@ -32,19 +58,25 @@ export class ImagesService {
     }
 
     const uploadedImages: any[] = [];
-    
-    for (const file of files) {
-      const result: any = await this.cloudinary.uploadImage(file, 'properties');
-      
-      const image = await this.prisma.image.create({
-        data: {
-          url: result.secure_url,
-          propertyId: dto.propertyId,
-          publicId: result.public_id,
-        },
-      });
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const result = await this.cloudinary.uploadImage(file, 'properties');
+        
+        const image = await this.prisma.image.create({
+          data: {
+            url: result.secure_url,
+            propertyId: dto.propertyId,
+            publicId: result.public_id,
+          },
+        });
 
-      uploadedImages.push(image);
+        uploadedImages.push(image);
+        this.logger.log(`✅ Image ${i + 1}/${files.length}: ${result.public_id}`);
+      } catch (error) {
+        this.logger.error(`❌ File ${file.originalname}:`, error.message);
+        throw new BadRequestException(`Failed to upload ${file.originalname}: ${error.message}`);
+      }
     }
 
     return {
@@ -73,7 +105,7 @@ export class ImagesService {
     }
 
     if (!image.publicId) {
-      throw new BadRequestException('Image has no publicId for deletion');
+      throw new BadRequestException('No publicId for deletion');
     }
 
     if (image.property.deletedAt || image.property.ownerId !== userId) {
@@ -81,12 +113,11 @@ export class ImagesService {
     }
 
     await this.cloudinary.deleteImage(image.publicId);
-    
     await this.prisma.image.update({
       where: { id: imageId },
       data: { deletedAt: new Date() },
     });
 
-    return { message: 'Image soft deleted successfully' };
+    return { message: 'Image deleted successfully' };
   }
 }

@@ -1,6 +1,5 @@
-import { IsString, IsNumber, Min, IsEnum, IsNotEmpty, Length } from 'class-validator';
+import { IsString, IsNumber, Min, IsNotEmpty, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { PropertyStatus } from '../../generated/prisma/client';
 
 export class CreatePropertyDto {
   @ApiProperty({ example: 'Modern 3BR Apartment Downtown' })
@@ -22,8 +21,4 @@ export class CreatePropertyDto {
   @IsNumber()
   @Min(0)
   price: number;
-
-  @ApiProperty({ enum: PropertyStatus, example: 'draft' })
-  @IsEnum(PropertyStatus)
-  status: PropertyStatus = 'draft';
 }

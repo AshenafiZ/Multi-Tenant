@@ -1,5 +1,5 @@
 import { IsEmail, IsString, IsEnum, MinLength, Length } from 'class-validator';
-import { Role } from '../../generated/prisma/client';  
+import { Role } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateAdminDto {

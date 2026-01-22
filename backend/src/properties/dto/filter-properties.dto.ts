@@ -1,7 +1,7 @@
 import { IsOptional, IsEnum, IsNumber, Min, IsString } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PropertyStatus } from '../../generated/prisma/client';
+import { PropertyStatus } from '@prisma/client';
 
 export class FilterPropertiesDto {
   @ApiPropertyOptional({ example: 'draft' })

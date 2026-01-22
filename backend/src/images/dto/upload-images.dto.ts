@@ -1,18 +1,13 @@
-import { IsString, IsNotEmpty, Min, Max, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UploadImagesDto {
-  @ApiProperty({ type: 'string', format: 'binary' })
-  files: any[];
-
-  @ApiProperty({ example: 'property-uuid' })
+  @ApiProperty({
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'UUID of the property',
+  })
   @IsString()
   @IsNotEmpty()
+  @IsUUID('4')
   propertyId: string;
-
-  @ApiProperty({ example: 1 })
-  @IsOptional()
-  @Min(1)
-  @Max(10)
-  primaryIndex?: number;
 }

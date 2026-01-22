@@ -1,7 +1,7 @@
 import { IsOptional, IsEnum, IsString, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Role } from '../../generated/prisma/client';
+import { Role } from '@prisma/client';
 
 export class QueryUsersDto {
   @ApiPropertyOptional({ example: 'user' })

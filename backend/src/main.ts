@@ -22,17 +22,43 @@ async function bootstrap() {
   // ✅ SWAGGER SETUP (auto-docs)
   const config = new DocumentBuilder()
     .setTitle('Property Platform API')
-    .setDescription('Real estate platform with RBAC')
-    .setVersion('1.0')
-    .addBearerAuth()  // JWT docs
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token obtained from /auth/login',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .addTag('auth', 'Authentication endpoints (login, register, bootstrap)')
+    .addTag('properties', 'Property management endpoints')
+    .addTag('images', 'Image upload and management')
+    .addTag('users', 'User management (admin only)')
+    .addTag('favorites', 'Favorites management')
+    .addTag('messages', 'Messaging between users')
+    .addServer(process.env.API_URL || 'http://localhost:3000', 'Development server')
+    .addServer('https://production-url.com', 'Production server')
     .build();
   
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true, // Keep auth token after page refresh
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
+    },
+    customSiteTitle: 'Property Platform API Docs',
+    customfavIcon: '/favicon.ico',
+    customCss: '.swagger-ui .topbar { display: none }',
+  });
 
   // ✅ CORS for React frontend
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   });
 

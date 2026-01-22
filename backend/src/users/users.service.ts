@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
-import { Prisma, Role, User } from '../generated/prisma/client';
+import { Prisma, Role, User } from '@prisma/client';
 import { PaginatedUsersResponse , UserResponse, PaginationMeta } from './entities/paginated-users.entity';
 
 

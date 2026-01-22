@@ -7,12 +7,12 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/response.dto';
 import * as bcrypt from 'bcrypt';
-import { Role } from '../generated/prisma/client';
+import { Role } from '@prisma/client';
 
 export interface UserPayload {
   sub: string;
   email: string;
-  role: Role;
+  role: Role; 
 }
 
 @Injectable()
@@ -157,10 +157,65 @@ export class AuthService {
     };
   }
 
+  // ✅ BOOTSTRAP: Create first admin (no auth required, only works if no admin exists)
+  async bootstrapAdmin(dto: CreateAdminDto): Promise<any> {
+    // Check if any admin already exists
+    const existingAdmin = await this.prisma.user.findFirst({
+      where: {
+        role: 'admin',
+        deletedAt: null,
+      },
+    });
+
+    if (existingAdmin) {
+      throw new BadRequestException(
+        'Admin already exists. Use /auth/admin endpoint (requires admin authentication) to create additional admins.',
+      );
+    }
+
+    // Check if user with this email exists
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existing) {
+      throw new BadRequestException('User with this email already exists');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    // Create first admin
+    const user = await this.prisma.user.create({
+      data: {
+        id: require('crypto').randomUUID(),
+        email: dto.email,
+        password: hashedPassword,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        role: 'admin' as Role, // Force admin role for bootstrap
+        isActive: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      message: 'First admin created successfully! You can now use this account to create additional admins.',
+      user,
+    };
+  }
+
   // ✅ GENERIC USER FINDER (used by strategies)
   async findUserById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
-    });
+    }); 
   }
 }
