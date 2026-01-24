@@ -4,7 +4,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { Prisma, Role, User } from '@prisma/client';
-import { PaginatedUsersResponse , UserResponse, PaginationMeta } from './entities/paginated-users.entity';
+import { PaginatedUsersResponse, UserResponse, PaginationMeta } from './entities/paginated-users.entity';
 
 
 export interface PaginatedUser {
@@ -22,29 +22,34 @@ export interface PaginatedUser {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  /** ADMIN: List ALL users with advanced filtering + pagination */
   async findAll(
-    query: QueryUsersDto, 
-    isAdmin: boolean
+    query: QueryUsersDto,
+    isAdmin: boolean,
+    currentUserId?: string
   ): Promise<PaginatedUsersResponse> {
-    const { 
-      page = 1, 
-      limit = 10, 
-      role, 
-      isActive, 
-      includeDeleted, 
-      search 
-    } = query;
-    
-    const skip = (page - 1) * limit;
-    const take = Math.min(limit, 100); // Max 100 records
+    const {
+      page = 1,
+      limit = 10,
+      role,
+      isActive,
+      includeDeleted = false,
+      search,
+      minProperties,
+      maxProperties,
+      minFavorites,
+      maxFavorites,
+      me = false
+    } = query || {};
 
-    // Build where clause - Admin sees soft deleted when requested
-    const where: Prisma.UserWhereInput = {
-      // Only active users unless admin + includeDeleted
+    const skip = (page - 1) * limit;
+    const take = Math.min(limit, 100);
+
+    // Base where clause (without count filters)
+    let baseWhere: Prisma.UserWhereInput = {
       ...(isAdmin && includeDeleted ? {} : { deletedAt: null }),
+      ...(currentUserId ? { id: currentUserId } : {}),
       ...(role && { role }),
       ...(typeof isActive === 'boolean' && { isActive }),
       ...(search && {
@@ -56,34 +61,48 @@ export class UsersService {
       }),
     };
 
-    const [prismaUsers, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-          deletedAt: isAdmin ? true : false,
-          _count: {
-            select: { 
-              properties: true, 
-              favorites: true 
-            },
+    // First get all matching users (max 100), then filter by counts
+    const allMatchingUsers = await this.prisma.user.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        deletedAt: isAdmin ? true : false,
+        _count: {
+          select: {
+            properties: true,
+            favorites: true
           },
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    // ✅ TRANSFORM Prisma _count → UserResponse format
-    const users: UserResponse[] = prismaUsers.map((user) => ({
+    // ✅ Client-side count filtering
+    let filteredUsers = allMatchingUsers;
+    if (minProperties !== undefined) {
+      filteredUsers = filteredUsers.filter(u => Number(u._count.properties) >= Number(minProperties));
+    }
+    if (maxProperties !== undefined) {
+      filteredUsers = filteredUsers.filter(u => Number(u._count.properties) <= Number(maxProperties));
+    }
+    if (minFavorites !== undefined) {
+      filteredUsers = filteredUsers.filter(u => Number(u._count.favorites) >= Number(minFavorites));
+    }
+    if (maxFavorites !== undefined) {
+      filteredUsers = filteredUsers.filter(u => Number(u._count.favorites) <= Number(maxFavorites));
+    }
+
+    // Apply pagination
+    const total = filteredUsers.length;
+    const paginatedUsers = filteredUsers.slice(skip, skip + take);
+
+    const users: UserResponse[] = paginatedUsers.map((user) => ({
       id: user.id,
       email: user.email,
       firstName: user.firstName,
@@ -107,6 +126,7 @@ export class UsersService {
     };
   }
 
+
   /** ADMIN: Get single user (sees soft deleted) */
   async findOne(id: string, includeDeleted: boolean = false): Promise<UserResponse> {
     const user = await this.prisma.user.findUnique({
@@ -121,7 +141,7 @@ export class UsersService {
         createdAt: true,
         deletedAt: true,
         _count: {
-          select: { 
+          select: {
             properties: includeDeleted ? true : { where: { deletedAt: null } },
             favorites: true,
           },
@@ -152,46 +172,15 @@ export class UsersService {
     };
   }
 
-  /** ANY USER: Get own profile (no soft delete access) */
+  /** ANY USER: Get own profile (no soft delete access) - DEPRECATED, use findAll with currentUserId */
   async findProfile(userId: string): Promise<UserResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        _count: {
-          select: { 
-            properties: { where: { deletedAt: null } }, // Only active properties
-            favorites: { where: { deletedAt: null } },
-          },
-        },
-      },
-    });
-
-    if (!user) {
+    const result = await this.findAll({} as QueryUsersDto, false, userId);
+    if (result.data.length === 0) {
       throw new NotFoundException('User profile not found');
     }
-
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
-      deletedAt: null, // Never show deletedAt for self
-      propertiesCount: Number(user._count.properties),
-      favoritesCount: Number(user._count.favorites),
-    };
+    return result.data[0];
   }
 
-  /** ADMIN: Update any user */
   async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) {
@@ -239,9 +228,9 @@ export class UsersService {
 
     await this.prisma.user.update({
       where: { id },
-      data: { 
+      data: {
         deletedAt: new Date(),
-        isActive: false 
+        isActive: false
       },
     });
 
@@ -250,11 +239,11 @@ export class UsersService {
 
   /** ADMIN: Restore soft deleted user */
   async restore(id: string): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({ 
-      where: { 
+    const user = await this.prisma.user.findUnique({
+      where: {
         id,
-        deletedAt: { not: null } 
-      } 
+        deletedAt: { not: null }
+      }
     });
 
     if (!user) {
@@ -263,9 +252,9 @@ export class UsersService {
 
     await this.prisma.user.update({
       where: { id },
-      data: { 
+      data: {
         deletedAt: null,
-        isActive: true 
+        isActive: true
       },
     });
 
@@ -277,4 +266,6 @@ export class UsersService {
     await this.prisma.user.delete({ where: { id } });
     return { message: `User permanently deleted` };
   }
+
 }
+

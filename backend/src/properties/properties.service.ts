@@ -51,22 +51,34 @@ export class PropertiesService {
 
         return this.formatPropertyResponse(propertyWithImages);
     }
-
-    async findAllPublished(filter: FilterPropertiesDto): Promise<PaginatedResult<PropertyResponse>> {
+    async findAllPublished(
+        filter: FilterPropertiesDto,
+        userId?: string,
+        isAdminRequest?: boolean
+    ): Promise<PaginatedResult<PropertyResponse>> {
         const {
             page = 1,
             limit = 12,
+            status,
             minPrice,
             maxPrice,
-            location
-        } = filter;
+            location,
+            minFavorites,
+            maxMessages,
+            my = false,
+            admin = false
+        } = filter || {};
 
         const skip = (page - 1) * limit;
         const take = Math.min(limit, 100);
 
-        const where: Prisma.PropertyWhereInput = {
+        // ✅ FIXED: Dynamic status logic based on access level
+        const effectiveStatus = isAdminRequest || my ? status : 'published';
+
+        let baseWhere: Prisma.PropertyWhereInput = {
+            ...(effectiveStatus && effectiveStatus !== 'published' ? { status: effectiveStatus } : {}),
+            ...(userId && my ? { ownerId: userId } : {}),
             deletedAt: null,
-            status: 'published',
             ...(location && {
                 location: {
                     contains: location,
@@ -77,28 +89,40 @@ export class PropertiesService {
             ...(typeof maxPrice === 'number' && { price: { lte: maxPrice } }),
         };
 
-        const [properties, total] = await Promise.all([
-            this.prisma.property.findMany({
-                where,
-                include: {
-                    owner: {
-                        select: { id: true, firstName: true, lastName: true, email: true },
-                    },
-                    images: {
-                        where: { deletedAt: null },
-                        take: 5,
-                        orderBy: { createdAt: 'asc' },
-                    },
-                    _count: { select: { favorites: true, messages: true } },
-                },
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take,
-            }),
-            this.prisma.property.count({ where }),
-        ]);
+        // Public users ONLY see published (ignore status param)
+        if (!isAdminRequest && !my) {
+            baseWhere.status = 'published';
+        }
 
-        const formattedProperties = properties.map(p => this.formatPropertyResponse(p));
+        const allMatchingProperties = await this.prisma.property.findMany({
+            where: baseWhere,
+            include: {
+                owner: {
+                    select: { id: true, firstName: true, lastName: true, email: true },
+                },
+                images: {
+                    where: { deletedAt: null },
+                    take: 5,
+                    orderBy: { createdAt: 'asc' },
+                },
+                _count: { select: { favorites: true, messages: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        // Client-side count filtering
+        let filteredProperties = allMatchingProperties;
+        if (minFavorites !== undefined) {
+            filteredProperties = filteredProperties.filter(p => Number(p._count.favorites) >= Number(minFavorites));
+        }
+        if (maxMessages !== undefined) {
+            filteredProperties = filteredProperties.filter(p => Number(p._count.messages) <= Number(maxMessages));
+        }
+
+        const total = filteredProperties.length;
+        const paginatedProperties = filteredProperties.slice(skip, skip + take);
+
+        const formattedProperties = paginatedProperties.map(p => this.formatPropertyResponse(p));
 
         return {
             data: formattedProperties,
@@ -110,6 +134,7 @@ export class PropertiesService {
             },
         };
     }
+
 
     async findOnePublicOrPrivate(id: string, user: { userId: string; role: string } | null): Promise<PropertyResponse> {
         const property = await this.prisma.property.findUnique({

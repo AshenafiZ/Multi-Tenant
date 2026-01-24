@@ -1,10 +1,10 @@
-import { IsOptional, IsEnum, IsNumber, Min, IsString } from 'class-validator';
+import { IsOptional, IsEnum, IsNumber, Min, IsString, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PropertyStatus } from '@prisma/client';
 
 export class FilterPropertiesDto {
-  @ApiPropertyOptional({ example: 'draft' })
+  @ApiPropertyOptional({ example: 'published', enum: ['draft', 'published', 'archived'] })
   @IsOptional()
   @IsEnum(PropertyStatus)
   status?: PropertyStatus;
@@ -25,13 +25,37 @@ export class FilterPropertiesDto {
   @IsString()
   location?: string;
 
-  @ApiPropertyOptional({ minimum: 1, example: 1 })
+  @ApiPropertyOptional({ example: 0, description: 'Minimum favorites' })
+  @IsOptional()
   @Type(() => Number)
-  @Transform(({ value }) => Math.max(1, value))
+  @Min(0)
+  minFavorites?: number;
+
+  @ApiPropertyOptional({ example: 100, description: 'Maximum messages' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  maxMessages?: number;
+
+  @ApiPropertyOptional({ example: true, description: 'Return only current user properties' })
+  @IsOptional()
+  @IsBoolean()
+  my?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Admin access (all statuses)' })
+  @IsOptional()
+  @IsBoolean()
+  admin?: boolean;
+
+  @ApiPropertyOptional({ minimum: 1, example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @Transform(({ value }) => Math.max(1, value || 1))
   page?: number = 1;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100, example: 12 })
+  @IsOptional()
   @Type(() => Number)
-  @Transform(({ value }) => Math.min(100, Math.max(1, value)))
+  @Transform(({ value }) => Math.min(100, Math.max(1, value || 12)))
   limit?: number = 12;
 }
