@@ -21,11 +21,11 @@ export default function OwnerDashboard() {
   const [uploadPropertyId, setUploadPropertyId] = useState<string | null>(null);
 
   const { data: properties, isLoading } = useQuery({
-    queryKey: ['properties', 'owner'],
-    queryFn: () => propertiesApi.getProperties({ status: undefined, page: 1, limit: 100 }),
+    queryKey: ['properties', 'owner', user?.id],
+    queryFn: () => propertiesApi.getMyProperties({ page: 1, limit: 100 }),
   });
 
-  const ownerProperties = properties?.data.filter((p) => p.ownerId === user?.id) || [];
+  const ownerProperties = properties?.data || [];
 
   const publishMutation = useMutation({
     mutationFn: (id: string) => propertiesApi.publishProperty(id),
@@ -145,7 +145,7 @@ export default function OwnerDashboard() {
                     <span>{parseFloat(property.price).toLocaleString()}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {property.status === 'draft' && (
+                    {(property.status === 'draft' || property.status === 'published') && (
                       <>
                         <button
                           onClick={() => setEditProperty(property)}
@@ -154,20 +154,24 @@ export default function OwnerDashboard() {
                           <Edit className="w-4 h-4" />
                           <span>Edit</span>
                         </button>
-                        <button
-                          onClick={() => setUploadPropertyId(property.id)}
-                          className="flex items-center space-x-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm"
-                        >
-                          <Upload className="w-4 h-4" />
-                          <span>Images</span>
-                        </button>
-                        <button
-                          onClick={() => handlePublish(property.id)}
-                          className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>Publish</span>
-                        </button>
+                        {property.status === 'draft' && (
+                          <>
+                            <button
+                              onClick={() => setUploadPropertyId(property.id)}
+                              className="flex items-center space-x-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm"
+                            >
+                              <Upload className="w-4 h-4" />
+                              <span>Images</span>
+                            </button>
+                            <button
+                              onClick={() => handlePublish(property.id)}
+                              className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Publish</span>
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                     <Link
@@ -226,4 +230,3 @@ export default function OwnerDashboard() {
     </ProtectedRoute>
   );
 }
-

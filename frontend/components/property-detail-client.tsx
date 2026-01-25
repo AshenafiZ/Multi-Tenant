@@ -4,7 +4,7 @@ import { Property } from '@/lib/types';
 import { useAuthStore } from '@/lib/auth-store';
 import { useFavoriteStore } from '@/lib/favorites-store';
 import { messagesApi } from '@/lib/api/messages';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Heart, MessageSquare, Send } from 'lucide-react';
@@ -19,19 +19,47 @@ interface MessageFormData {
 
 export default function PropertyDetailClient({ property }: PropertyDetailClientProps) {
   const { user, isAuthenticated } = useAuthStore();
-  const { isFavorite, toggleFavorite } = useFavoriteStore();
+  const { isFavorite, toggleFavorite, syncFavorites } = useFavoriteStore();
   const [showMessageForm, setShowMessageForm] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [favorite, setFavorite] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<MessageFormData>();
 
-  const favorite = isFavorite(property.id);
+  // Sync favorites on mount and check initial state
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncFavorites().then(() => {
+        setFavorite(isFavorite(property.id));
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, property.id]);
+
   const canContact = isAuthenticated && user?.role === 'user' && property.ownerId && property.status === 'published';
   const isOwner = user?.id === property.ownerId;
   const isAdmin = user?.role === 'admin';
   
   // Show property if: published, or user is owner/admin
   const canView = property.status === 'published' || isOwner || isAdmin;
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) return;
+    
+    if (isToggling) return;
+    
+    setIsToggling(true);
+    
+    try {
+      await toggleFavorite(property.id);
+      setFavorite(isFavorite(property.id));
+    } catch (error) {
+      // Error handling is done in toggleFavorite
+    } finally {
+      setIsToggling(false);
+    }
+  };
   
   if (!canView) {
     return (
@@ -71,15 +99,23 @@ export default function PropertyDetailClient({ property }: PropertyDetailClientP
         {isAuthenticated && !isOwner && (
           <>
             <button
-              onClick={() => toggleFavorite(property.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+              onClick={handleToggleFavorite}
+              disabled={isToggling}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 favorite
                   ? 'bg-red-100 text-red-600 hover:bg-red-200'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
-              <span>{favorite ? 'Remove from Favorites' : 'Add to Favorites'}</span>
+              <span>
+                {isToggling 
+                  ? 'Processing...' 
+                  : favorite 
+                    ? 'Remove from Favorites' 
+                    : 'Add to Favorites'
+                }
+              </span>
             </button>
 
             {canContact && (

@@ -2,8 +2,8 @@ import apiClient from '../api-client';
 import type { Favorite, PaginatedResponse } from '../types';
 
 export const favoritesApi = {
-  getFavorites: async (): Promise<PaginatedResponse<Favorite>> => {
-    const response = await apiClient.get<PaginatedResponse<Favorite>>('/favorites');
+  getFavorites: async (): Promise<Favorite[] | PaginatedResponse<Favorite>> => {
+    const response = await apiClient.get<Favorite[] | PaginatedResponse<Favorite>>('/favorites');
     return response.data;
   },
 

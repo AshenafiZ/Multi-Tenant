@@ -12,12 +12,12 @@ export class CreateUserDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ example: 'John' })
+  @ApiProperty({ example: 'Abebe' })
   @IsString()
   @Length(1, 100)
   firstName: string;
 
-  @ApiProperty({ example: 'Doe' })
+  @ApiProperty({ example: 'Kebede' })
   @IsString()
   @Length(1, 100)
   lastName: string;

@@ -53,9 +53,9 @@ export class AuthController {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            email: { type: 'string', example: 'john.doe@example.com' },
-            firstName: { type: 'string', example: 'John' },
-            lastName: { type: 'string', example: 'Doe' },
+            email: { type: 'string', example: 'abebe.kebede@example.com' },
+            firstName: { type: 'string', example: 'Abebe' },
+            lastName: { type: 'string', example: 'Kebede' },
             role: { type: 'string', enum: ['user', 'owner'], example: 'owner' },
             createdAt: { type: 'string', format: 'date-time' }
           }
@@ -86,9 +86,9 @@ export class AuthController {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            email: { type: 'string', example: 'admin@example.com' },
-            firstName: { type: 'string', example: 'Admin' },
-            lastName: { type: 'string', example: 'User' },
+            email: { type: 'string', example: 'abebe.kebede@example.com' },
+            firstName: { type: 'string', example: 'Abebe' },
+            lastName: { type: 'string', example: 'Kebede' },
             role: { type: 'string', enum: ['admin'], example: 'admin' },
             createdAt: { type: 'string', format: 'date-time' }
           }
@@ -122,9 +122,9 @@ export class AuthController {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
-            email: { type: 'string', example: 'newuser@example.com' },
-            firstName: { type: 'string', example: 'New' },
-            lastName: { type: 'string', example: 'User' },
+            email: { type: 'string', example: 'abebe.kebede@example.com' },
+            firstName: { type: 'string', example: 'Abebe' },
+            lastName: { type: 'string', example: 'Kebede' },
             role: { type: 'string', enum: ['admin', 'owner', 'user'], example: 'owner' },
             createdAt: { type: 'string', format: 'date-time' }
           }

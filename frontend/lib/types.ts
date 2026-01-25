@@ -9,6 +9,7 @@ export interface User {
   role: Role;
   isActive: boolean;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export interface AuthResponse {
@@ -16,6 +17,35 @@ export interface AuthResponse {
   refreshToken: string;
   user: User;
 }
+export interface MessageProperty {
+  id: string;
+  title: string;
+  location: string;
+  price: string;
+  images: Array<string | Image>;
+  description?: string;
+  status?: PropertyStatus;
+  ownerId?: string;
+  owner?: Partial<User>;
+  favoritesCount?: number;
+  messagesCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  propertyId: string;
+  content: string;
+  isRead: boolean;
+  sender: Partial<User>;
+  receiver: Partial<User>;
+  property: MessageProperty;
+  createdAt: string;
+}
+
 
 export interface Property {
   id: string;
@@ -32,6 +62,8 @@ export interface Property {
     email: string;
   };
   images: Image[];
+  favoritesCount?: number;
+  messagesCount?: number;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
@@ -53,19 +85,6 @@ export interface Favorite {
   createdAt: string;
 }
 
-export interface Message {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  propertyId: string;
-  content: string;
-  isRead: boolean;
-  sender: User;
-  receiver: User;
-  property: Property;
-  createdAt: string;
-}
-
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
@@ -83,5 +102,6 @@ export interface FilterPropertiesParams {
   location?: string;
   page?: number;
   limit?: number;
+  includeDeleted?: boolean;
 }
 

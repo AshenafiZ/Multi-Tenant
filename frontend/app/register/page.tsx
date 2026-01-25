@@ -17,7 +17,7 @@ const registerSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   firstName: z.string().min(1, 'First name is required').max(100, 'First name too long'),
   lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long'),
-  role: z.enum(['user', 'owner']), 
+  role: z.union([z.literal('user'), z.literal('owner')])
 });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
@@ -80,7 +80,7 @@ export default function RegisterPage() {
                   {...register('firstName')}
                   type="text"
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="John"
+                  placeholder="Abebe"
                 />
                 {errors.firstName && (
                   <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
@@ -94,7 +94,7 @@ export default function RegisterPage() {
                   {...register('lastName')}
                   type="text"
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Doe"
+                  placeholder="Kebede"
                 />
                 {errors.lastName && (
                   <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
@@ -125,7 +125,7 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="••••••••"
+                
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -162,3 +162,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

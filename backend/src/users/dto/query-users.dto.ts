@@ -16,6 +16,7 @@ export class QueryUsersDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   includeDeleted?: boolean;
 
@@ -27,16 +28,20 @@ export class QueryUsersDto {
   @ApiPropertyOptional({ minimum: 1, example: 1 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  @Min(1)
   @Transform(({ value }) => Math.max(1, value || 1))
   page?: number = 1;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100, example: 10 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  @Min(1)
   @Transform(({ value }) => Math.min(100, Math.max(1, value || 10)))
   limit?: number = 10;
 
-  @ApiPropertyOptional({ example: 'John' })
+  @ApiPropertyOptional({ example: 'Abebe' })
   @IsOptional()
   @IsString()
   search?: string;

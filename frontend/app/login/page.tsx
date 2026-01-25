@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,6 +10,7 @@ import Cookies from 'js-cookie';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { Building2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -21,8 +21,35 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const setUser = useAuthStore((state) => state.setUser);
   const [isLoading, setIsLoading] = useState(false);
+  const hasRedirected = useRef(false);
+  const isSubmitting = useRef(false);
+  const [mounted, setMounted] = useState(false);
+  const checkDone = useRef(false);
+
+  // Only run on client to prevent hydration issues
+  useEffect(() => {
+    if (checkDone.current) return;
+    checkDone.current = true;
+    
+    setMounted(true);
+    
+    // Check if already logged in - but only once and with a delay to prevent loops
+    if (typeof window !== 'undefined' && !hasRedirected.current) {
+      const token = Cookies.get('accessToken');
+      if (token) {
+        // Only redirect if we have a valid token and haven't redirected yet
+        hasRedirected.current = true;
+        // Use a longer delay to ensure page is fully loaded
+        setTimeout(() => {
+          if (window.location.pathname === '/login') {
+            window.location.replace('/');
+          }
+        }, 100);
+      }
+    }
+  }, []);
 
   const {
     register,
@@ -33,20 +60,67 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
+    // Prevent any form of double submission
+    if (isLoading || hasRedirected.current || isSubmitting.current) {
+      return;
+    }
+    
+    isSubmitting.current = true;
     setIsLoading(true);
+    
     try {
       const response = await authApi.login(data);
+      
+      // Set tokens FIRST
       Cookies.set('accessToken', response.accessToken, { expires: 7 });
       Cookies.set('refreshToken', response.refreshToken, { expires: 7 });
+      
+      // Set user in store
       setUser(response.user);
+      
       toast.success('Login successful!');
-      router.push('/');
+      
+      // ✅ ROLE-BASED REDIRECT - uses response.user.role directly
+      const roleRedirects: Record<string, string> = {
+        'admin': '/dashboard/admin',
+        'owner': '/dashboard/owner',
+        'user': '/dashboard/user'
+      };
+      
+      const redirectPath = roleRedirects[response.user.role] || '/';
+      
+      // Mark as redirected to prevent multiple redirects
+      hasRedirected.current = true;
+      isSubmitting.current = false;
+      
+      // Next.js router replace - clean navigation
+      router.replace(redirectPath, { scroll: false });
+      
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Login failed');
-    } finally {
+      isSubmitting.current = false;
+      
+      // Only show error if it's not a network error or if we have a response
+      if (error.response) {
+        const errorMessage = error.response?.data?.message || 'Login failed. Please check your credentials.';
+        toast.error(errorMessage);
+      } else if (error.request) {
+        toast.error('Network error. Please check if the backend server is running.');
+      } else {
+        toast.error('An unexpected error occurred. Please try again.');
+      }
+      
       setIsLoading(false);
     }
   };
+
+  // Show loading state during SSR to prevent hydration issues
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -73,7 +147,7 @@ export default function LoginPage() {
                 {...register('email')}
                 type="email"
                 autoComplete="email"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="you@example.com"
               />
               {errors.email && (
@@ -88,8 +162,7 @@ export default function LoginPage() {
                 {...register('password')}
                 type="password"
                 autoComplete="current-password"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="••••••••"
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -111,4 +184,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

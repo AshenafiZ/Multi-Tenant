@@ -19,22 +19,54 @@ export default async function HomePage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const page = parseInt(params.page || '1');
-  const limit = parseInt(params.limit || '12');
+  const page = parseInt(params.page || '1', 10) || 1;
+  const limit = parseInt(params.limit || '12', 10) || 12;
   
-  const filters = {
+  const filters: any = {
     page,
     limit,
-    status: 'published' as const,
-    ...(params.location && { location: params.location }),
-    ...(params.minPrice && { minPrice: parseFloat(params.minPrice) }),
-    ...(params.maxPrice && { maxPrice: parseFloat(params.maxPrice) }),
+  };
+  
+  // Only add filters if they have valid values
+  if (params.location && params.location.trim()) {
+    filters.location = params.location.trim();
+  }
+  
+  if (params.minPrice) {
+    const minPrice = parseFloat(params.minPrice);
+    if (!isNaN(minPrice) && minPrice >= 0) {
+      filters.minPrice = minPrice;
+    }
+  }
+  
+  if (params.maxPrice) {
+    const maxPrice = parseFloat(params.maxPrice);
+    if (!isNaN(maxPrice) && maxPrice >= 0) {
+      filters.maxPrice = maxPrice;
+    }
+  }
+
+  // Helper function to build pagination URL
+  const buildPaginationUrl = (newPage: number): string => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', newPage.toString());
+    if (params.location) searchParams.set('location', params.location);
+    if (params.minPrice) searchParams.set('minPrice', params.minPrice);
+    if (params.maxPrice) searchParams.set('maxPrice', params.maxPrice);
+    return `/?${searchParams.toString()}`;
   };
 
-  let propertiesData;
+  let propertiesData: { data: any[]; meta: { page: number; limit: number; total: number; totalPages: number } };
+  let errorMessage: string | null = null;
   try {
-    propertiesData = await propertiesApiServer.getProperties(filters);
-  } catch (error) {
+    const result = await propertiesApiServer.getProperties(filters);
+    propertiesData = {
+      data: Array.isArray(result?.data) ? result.data : [],
+      meta: result?.meta || { page: 1, limit: 12, total: 0, totalPages: 0 },
+    };
+  } catch (error: any) {
+    console.error('Error fetching properties:', error);
+    errorMessage = error?.response?.data?.message || error?.message || 'Failed to fetch properties. Please check if the backend server is running.';
     propertiesData = { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } };
   }
 
@@ -50,11 +82,19 @@ export default async function HomePage({
 
       <PropertyFilters />
 
-      {propertiesData.data.length === 0 ? (
+      {!propertiesData.data || propertiesData.data.length === 0 ? (
         <div className="text-center py-12">
           <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No properties found</h3>
-          <p className="text-gray-600">Try adjusting your filters</p>
+          {errorMessage ? (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md max-w-md mx-auto">
+              <p className="text-red-800 font-medium mb-2">Error loading properties:</p>
+              <p className="text-red-600 text-sm">{errorMessage}</p>
+              <p className="text-gray-600 text-sm mt-2">Make sure the backend server is running at {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}</p>
+            </div>
+          ) : (
+            <p className="text-gray-600">Try adjusting your filters</p>
+          )}
         </div>
       ) : (
         <>
@@ -65,11 +105,11 @@ export default async function HomePage({
           </div>
 
           {/* Pagination */}
-          {propertiesData.meta.totalPages > 1 && (
+          {propertiesData.meta && propertiesData.meta.totalPages > 1 && (
             <div className="flex justify-center items-center space-x-2">
               {page > 1 && (
                 <Link
-                  href={`/?page=${page - 1}&${new URLSearchParams(params as any).toString()}`}
+                  href={buildPaginationUrl(page - 1)}
                   className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
                   Previous
@@ -80,7 +120,7 @@ export default async function HomePage({
               </span>
               {page < propertiesData.meta.totalPages && (
                 <Link
-                  href={`/?page=${page + 1}&${new URLSearchParams(params as any).toString()}`}
+                  href={buildPaginationUrl(page + 1)}
                   className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
                   Next

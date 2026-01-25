@@ -1,8 +1,10 @@
 import { propertiesApiServer } from '@/lib/api/properties-server';
 import PropertyDetailClient from '@/components/property-detail-client';
+import PropertyImageGallery from '@/components/property-image-gallery';
+import PropertyActions from '@/components/property-actions';
 import { notFound } from 'next/navigation';
-import Image from 'next/image';
-import { MapPin, DollarSign, User } from 'lucide-react';
+import { MapPin, DollarSign, User, Mail, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 
 export default async function PropertyDetailPage({
   params,
@@ -10,17 +12,15 @@ export default async function PropertyDetailPage({
   params: { id: string };
 }) {
   let property;
+  const { id } = await params;
   try {
-    property = await propertiesApiServer.getProperty(params.id);
+    property = await propertiesApiServer.getProperty(id);
   } catch (error: any) {
     if (error.response?.status === 404 || error.code === 'ERR_BAD_REQUEST') {
       notFound();
     }
-    // For other errors, still show 404 to prevent exposing internal errors
     notFound();
   }
-
-  // Note: Client component will handle access control for non-published properties
 
   const price = parseFloat(property.price);
 
@@ -28,37 +28,7 @@ export default async function PropertyDetailPage({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Image Gallery */}
-        {property.images && property.images.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-4">
-            <div className="relative h-96">
-              <Image
-                src={property.images[0].url}
-                alt={property.title}
-                fill
-                className="object-cover rounded-lg"
-                priority
-              />
-            </div>
-            {property.images.length > 1 && (
-              <div className="grid grid-cols-2 gap-2">
-                {property.images.slice(1, 5).map((image) => (
-                  <div key={image.id} className="relative h-48">
-                    <Image
-                      src={image.url}
-                      alt={property.title}
-                      fill
-                      className="object-cover rounded-lg"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="h-96 bg-gray-200 flex items-center justify-center">
-            <span className="text-gray-400">No images available</span>
-          </div>
-        )}
+        <PropertyImageGallery images={property.images || []} propertyTitle={property.title} />
 
         <div className="p-6">
           <div className="flex items-start justify-between mb-4">
@@ -80,11 +50,22 @@ export default async function PropertyDetailPage({
 
           {property.owner && (
             <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <div className="flex items-center space-x-2 text-gray-700">
-                <User className="w-5 h-5" />
-                <span className="font-medium">
-                  Owner: {property.owner.firstName} {property.owner.lastName}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-gray-700">
+                  <User className="w-5 h-5" />
+                  <span className="font-medium">
+                    Owner: {property.owner.firstName} {property.owner.lastName}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Link
+                    href={`/properties/${id}/contact`}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>Contact Owner</span>
+                  </Link>
+                </div>
               </div>
             </div>
           )}
@@ -94,7 +75,39 @@ export default async function PropertyDetailPage({
             <p className="text-gray-700 whitespace-pre-wrap">{property.description}</p>
           </div>
 
+          {/* Contact Owner Section */}
+          {property.owner && property.status === 'published' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
+                Contact Property Owner
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Interested in this property? Reach out to the owner directly via email or send them a message through our platform.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/properties/${id}/contact`}
+                  className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  <Mail className="w-5 h-5" />
+                  <span>Contact Owner</span>
+                </Link>
+                <Link
+                  href="/messages"
+                  className="flex items-center space-x-2 px-6 py-3 bg-white text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span>View Messages</span>
+                </Link>
+              </div>
+            </div>
+          )}
+
           <PropertyDetailClient property={property} />
+          
+          {/* Role-based actions */}
+          <PropertyActions property={property} />
         </div>
       </div>
     </div>

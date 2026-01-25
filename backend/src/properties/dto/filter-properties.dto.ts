@@ -12,12 +12,14 @@ export class FilterPropertiesDto {
   @ApiPropertyOptional({ example: 250000, minimum: 0 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
   @Min(0)
   minPrice?: number;
 
   @ApiPropertyOptional({ example: 500000 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
   maxPrice?: number;
 
   @ApiPropertyOptional({ example: 'Addis Ababa' })
@@ -50,12 +52,21 @@ export class FilterPropertiesDto {
   @ApiPropertyOptional({ minimum: 1, example: 1 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  @Min(1)
   @Transform(({ value }) => Math.max(1, value || 1))
   page?: number = 1;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100, example: 12 })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  @Min(1)
   @Transform(({ value }) => Math.min(100, Math.max(1, value || 12)))
   limit?: number = 12;
+
+  @ApiPropertyOptional({ example: false, description: 'Include soft-deleted properties (admin only)' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeDeleted?: boolean = false;
 }

@@ -13,9 +13,16 @@ export const apiClient: AxiosInstance = axios.create({
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = Cookies.get('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Don't add auth token for login/register/auth endpoints
+    const isAuthEndpoint = config.url?.includes('/auth/login') || 
+                           config.url?.includes('/auth/register') ||
+                           config.url?.includes('/auth/bootstrap');
+    
+    if (!isAuthEndpoint) {
+      const token = Cookies.get('accessToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -25,16 +32,37 @@ apiClient.interceptors.request.use(
 );
 
 // Response interceptor to handle errors
+let isRedirecting = false;
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Clear tokens on 401
-      Cookies.remove('accessToken');
-      Cookies.remove('refreshToken');
-      // Redirect to login if not already there
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      // Don't redirect if we're already on login/register pages or if it's an auth request
+      const isAuthRequest = error.config?.url?.includes('/auth/login') || 
+                           error.config?.url?.includes('/auth/register') ||
+                           error.config?.url?.includes('/auth/bootstrap') ||
+                           error.config?.url?.includes('/auth/current-user');
+      
+      if (typeof window === 'undefined') {
+        return Promise.reject(error);
+      }
+      
+      const currentPath = window.location.pathname;
+      const isLoginPage = currentPath === '/login' || currentPath === '/register';
+      
+      // Only redirect if it's NOT an auth request, NOT already on login page, and NOT already redirecting
+      if (!isAuthRequest && !isLoginPage && !isRedirecting) {
+        isRedirecting = true;
+        // Clear tokens on 401
+        Cookies.remove('accessToken');
+        Cookies.remove('refreshToken');
+        // Use replace instead of href to prevent adding to history
+        window.location.replace('/login');
+        // Reset flag after a delay to allow for navigation
+        setTimeout(() => {
+          isRedirecting = false;
+        }, 1000);
       }
     }
     return Promise.reject(error);

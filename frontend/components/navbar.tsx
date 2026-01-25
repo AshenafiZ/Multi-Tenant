@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/auth-store';
 import { useRouter } from 'next/navigation';
-import { Home, LogOut, User, Building2, Settings } from 'lucide-react';
+import { Home, LogOut, User, Building2, Settings, MessageSquare, Users, Plus } from 'lucide-react';
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuthStore();
+  // Only subscribe to what we need to prevent unnecessary re-renders
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
 
   const handleLogout = () => {
@@ -15,7 +18,7 @@ export function Navbar() {
   };
 
   const getDashboardLink = () => {
-    if (!user?.role) return null; 
+    if (!user) return null;
     switch (user.role) {
       case 'admin':
         return '/dashboard/admin';
@@ -45,6 +48,36 @@ export function Navbar() {
 
             {isAuthenticated ? (
               <>
+                <Link
+                  href="/messages"
+                  className="text-gray-700 hover:text-blue-600 flex items-center space-x-1"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Messages</span>
+                </Link>
+                {(user?.role === 'admin' || user?.role === 'owner') && (
+                  <Link
+                    href={user?.role === 'admin' ? '/dashboard/admin' : '/dashboard/owner'}
+                    className="text-gray-700 hover:text-blue-600 flex items-center space-x-1"
+                    onClick={(e) => {
+                      // Open create modal on dashboard
+                      const dashboardUrl = user?.role === 'admin' ? '/dashboard/admin' : '/dashboard/owner';
+                      // We'll let the dashboard handle the modal, just navigate
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create Property</span>
+                  </Link>
+                )}
+                {user?.role === 'admin' && (
+                  <Link
+                    href="/dashboard/admin?tab=users"
+                    className="text-gray-700 hover:text-blue-600 flex items-center space-x-1"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Manage Users</span>
+                  </Link>
+                )}
                 {getDashboardLink() && (
                   <Link
                     href={getDashboardLink()!}
@@ -55,11 +88,9 @@ export function Navbar() {
                   </Link>
                 )}
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span>
-                    {user?.firstName ?? ''} {user?.lastName ?? ''}
-                  </span>
+                  <span>{user?.firstName ?? 'User'} {user?.lastName ?? ''}</span>
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                    {user?.role ?? 'user'}
+                    {user?.role ?? 'User'}
                   </span>
                 </div>
                 <button
@@ -89,3 +120,4 @@ export function Navbar() {
     </nav>
   );
 }
+

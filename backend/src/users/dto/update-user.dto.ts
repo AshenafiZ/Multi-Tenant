@@ -3,13 +3,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 export class UpdateUserDto {
-  @ApiProperty({ example: 'John', required: false })
+  @ApiProperty({ example: 'Abebe', required: false })
   @IsOptional()
   @IsString()
   @Length(1, 100)
   firstName?: string;
 
-  @ApiProperty({ example: 'Doe', required: false })
+  @ApiProperty({ example: 'Kebede', required: false })
   @IsOptional()
   @IsString()
   @Length(1, 100)

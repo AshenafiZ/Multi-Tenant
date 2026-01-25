@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { propertiesApi } from '@/lib/api/properties';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { X } from 'lucide-react';
+import { X, Upload, XCircle } from 'lucide-react';
+import Image from 'next/image';
 
 const propertySchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(255),
@@ -26,6 +27,8 @@ interface CreatePropertyModalProps {
 export default function CreatePropertyModal({ onClose, onSuccess }: CreatePropertyModalProps) {
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
   const {
     register,
@@ -36,10 +39,13 @@ export default function CreatePropertyModal({ onClose, onSuccess }: CreateProper
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: PropertyFormData) => propertiesApi.createProperty(data),
+    mutationFn: (data: { formData: PropertyFormData; images: File[] }) => 
+      propertiesApi.createProperty(data.formData, data.images),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       toast.success('Property created successfully!');
+      setSelectedImages([]);
+      setImagePreviews([]);
       onSuccess();
     },
     onError: (error: any) => {
@@ -47,13 +53,52 @@ export default function CreatePropertyModal({ onClose, onSuccess }: CreateProper
     },
   });
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + selectedImages.length > 10) {
+      toast.error('Maximum 10 images allowed');
+      return;
+    }
+
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} is not an image`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 5MB`);
+        return false;
+      }
+      return true;
+    });
+
+    setSelectedImages([...selectedImages, ...validFiles]);
+    
+    // Create previews
+    validFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(selectedImages.filter((_, i) => i !== index));
+    setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+  };
+
   const onSubmit = async (data: PropertyFormData) => {
     setIsSubmitting(true);
-    createMutation.mutate(data, {
-      onSettled: () => {
-        setIsSubmitting(false);
-      },
-    });
+    createMutation.mutate(
+      { formData: data, images: selectedImages },
+      {
+        onSettled: () => {
+          setIsSubmitting(false);
+        },
+      }
+    );
   };
 
   return (
@@ -130,6 +175,59 @@ export default function CreatePropertyModal({ onClose, onSuccess }: CreateProper
             />
             {errors.price && (
               <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="images" className="block text-sm font-medium text-gray-700 mb-1">
+              Images (up to 10, max 5MB each)
+            </label>
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div className="space-y-1 text-center">
+                <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="flex text-sm text-gray-600">
+                  <label
+                    htmlFor="images"
+                    className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                  >
+                    <span>Upload images</span>
+                    <input
+                      id="images"
+                      name="images"
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={handleImageSelect}
+                    />
+                  </label>
+                  <p className="pl-1">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB each</p>
+              </div>
+            </div>
+            {selectedImages.length > 0 && (
+              <div className="mt-4 grid grid-cols-4 gap-4">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative group">
+                    <div className="relative aspect-square rounded-lg overflow-hidden border border-gray-300">
+                      <Image
+                        src={preview}
+                        alt={`Preview ${index + 1}`}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XCircle className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

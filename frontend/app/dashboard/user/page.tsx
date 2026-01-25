@@ -27,6 +27,16 @@ export default function UserDashboard() {
     queryFn: () => messagesApi.getInbox(),
   });
 
+  // Normalize favorites data - handle both array and paginated response
+  const favoritesList = Array.isArray(favorites) 
+    ? favorites 
+    : favorites?.data || [];
+
+  // Normalize inbox data - handle both array and paginated response
+  const inboxList = Array.isArray(inbox)
+    ? inbox
+    : inbox?.data || [];
+
   const { data: unreadCount } = useQuery({
     queryKey: ['messages', 'unread-count'],
     queryFn: () => messagesApi.getUnreadCount(),
@@ -43,7 +53,7 @@ export default function UserDashboard() {
               <div>
                 <p className="text-gray-600 text-sm">Favorites</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {favorites?.data.length || 0}
+                  {favoritesList.length}
                 </p>
               </div>
               <Heart className="w-12 h-12 text-red-500" />
@@ -55,7 +65,7 @@ export default function UserDashboard() {
               <div>
                 <p className="text-gray-600 text-sm">Messages</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {inbox?.data.length || 0}
+                  {inboxList.length}
                 </p>
               </div>
               <MessageSquare className="w-12 h-12 text-blue-500" />
@@ -86,11 +96,11 @@ export default function UserDashboard() {
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               </div>
-            ) : favorites?.data.length === 0 ? (
+            ) : favoritesList.length === 0 ? (
               <p className="text-gray-600 text-center py-8">No favorites yet</p>
             ) : (
               <div className="space-y-4">
-                {favorites?.data.map((favorite) => (
+                {favoritesList.map((favorite) => (
                   <Link
                     key={favorite.id}
                     href={`/properties/${favorite.property.id}`}
@@ -127,29 +137,40 @@ export default function UserDashboard() {
 
           {/* Messages Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <MessageSquare className="w-5 h-5 mr-2 text-blue-500" />
-              Messages
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold flex items-center">
+                <MessageSquare className="w-5 h-5 mr-2 text-blue-500" />
+                Messages
+              </h2>
+              <Link
+                href="/messages"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                View All →
+              </Link>
+            </div>
             {inboxLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               </div>
-            ) : inbox?.data.length === 0 ? (
+            ) : inboxList.length === 0 ? (
               <p className="text-gray-600 text-center py-8">No messages yet</p>
             ) : (
               <div className="space-y-4">
-                {inbox?.data.map((message) => (
-                  <div
+                {inboxList.slice(0, 3).map((message) => (
+                  <Link
                     key={message.id}
-                    className={`border rounded-lg p-4 ${!message.isRead ? 'bg-blue-50 border-blue-200' : ''}`}
+                    href={`/properties/${message.propertyId}`}
+                    className={`block border rounded-lg p-4 hover:shadow-md transition-all ${
+                      !message.isRead ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
+                    }`}
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="font-semibold text-gray-900">
-                          From: {message.sender.firstName} {message.sender.lastName}
+                          From: {message.sender?.firstName} {message.sender?.lastName}
                         </p>
-                        <p className="text-sm text-gray-600">Re: {message.property.title}</p>
+                        <p className="text-sm text-gray-600">Re: {message.property?.title}</p>
                       </div>
                       {!message.isRead && (
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
@@ -157,12 +178,22 @@ export default function UserDashboard() {
                         </span>
                       )}
                     </div>
-                    <p className="text-gray-700">{message.content}</p>
+                    <p className="text-gray-700 line-clamp-2">{message.content}</p>
                     <p className="text-xs text-gray-500 mt-2">
                       {new Date(message.createdAt).toLocaleString()}
                     </p>
-                  </div>
+                  </Link>
                 ))}
+                {inboxList.length > 3 && (
+                  <div className="text-center pt-2">
+                    <Link
+                      href="/messages"
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      View {inboxList.length - 3} more messages →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>

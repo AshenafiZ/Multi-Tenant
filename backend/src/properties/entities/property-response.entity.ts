@@ -41,6 +41,9 @@ export class PropertyResponse {
   @ApiProperty({ enum: ['draft', 'published', 'archived'] })
   status: string;
 
+  @ApiProperty()
+  ownerId: string;
+
   @ApiProperty({ type: OwnerInfo })
   owner: OwnerInfo;
 

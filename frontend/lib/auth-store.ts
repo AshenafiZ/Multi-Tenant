@@ -21,13 +21,17 @@ export const useAuthStore = create<AuthState>()(
         if (user) {
           // User data is already in zustand persist, but we keep token in cookies
         } else {
-          Cookies.remove('accessToken');
-          Cookies.remove('refreshToken');
+          if (typeof window !== 'undefined') {
+            Cookies.remove('accessToken');
+            Cookies.remove('refreshToken');
+          }
         }
       },
       logout: () => {
-        Cookies.remove('accessToken');
-        Cookies.remove('refreshToken');
+        if (typeof window !== 'undefined') {
+          Cookies.remove('accessToken');
+          Cookies.remove('refreshToken');
+        }
         set({ user: null, isAuthenticated: false });
       },
     }),
